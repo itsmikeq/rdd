@@ -1,0 +1,19 @@
+Q: What factors impact performance? What would you do to improve them?
+
+A: I think my lack of knowledge of the data set and having never used GCloud kind of make this more difficult than it
+should have been.  A better understanding of what is available in the Google SQL query language would be helpful too.
+I read up a bunch on it but still being new to it, I was prone to stupid errors - like querying 200GB of data.
+As for performance - it seems to take about 1s per 1GB of data.  Scoping the query more efficiently would give faster results.
+
+Q: How could you add additional reporting formats besides STDOUT plain text?
+
+A: Since we are going with commandline tools, adding a graphing tool like gnuplot.  In fact, if you run this tool with
+the --gnuplot or -g option (and you have gnuplot installed), you can see a quick example.  A histogram in ASCII would have
+been fun to do too...
+If we were not limited to commandline tools, then a graphing library like the one from google would work, or ra
+
+Q: If you had to implement this using only one gem/package, which would it be? Why?
+
+A: It would be the GCloud package.  Writing an entire API layer would require a suite of tests and a lot of time.
+Since there's already a great one available from Google, it made the most sense to use it.
+All of the other packages I used are built-in.
