@@ -1,23 +1,13 @@
 #!/usr/bin/env ruby
-# builtins: ostruct optparse optparse/date optparse/time
+# Load up my helper
+load File.join(File.dirname(__FILE__), 'util.rb')
+
 # Password is notasecret
 # Creds are needed for a successful connection, this is sloppy but functional
 creds_file = File.join(File.dirname(__FILE__), Dir.glob('*.json').first)
 raise "json encoded google apps file needed, put it in the current directory.
 It needs to be the json formatted one from https://console.developers.google.com/project" unless creds_file
 ENV['GOOGLE_APPLICATION_CREDENTIALS'] = creds_file
-
-# Load up my helper
-load File.join(File.dirname(__FILE__), 'util.rb')
-
-%w(ostruct optparse optparse/date optparse/time gcloud).each do |_req|
-  begin
-    require _req
-  rescue LoadError => e
-    puts "Yo - you need to install #{_req} 'gem install #{_req}'"
-    raise e
-  end
-end
 
 class ElParso
   def self.parse(args)
@@ -79,11 +69,12 @@ sql = if options.before.to_time.to_i > Time.parse("2015-01-01").to_time.to_i # i
 puts "Getting Github statistics for #{options.after} - #{options.before}"
 start = Time.now
 # puts sql
-results = Query.new.execute sql
+done_job = Query.new.execute sql
+results = done_job.query_results
 finish = Time.now
 # puts results.inspect
-
-puts "Results (#{(finish - start).to_i } seconds)"
+cached = done_job.cache_hit? ? '[cached]' : ''
+puts "Results (#{(finish - start).to_i} seconds, searching #{done_job.bytes_processed} bytes #{cached})"
 
 # Going old school here with some line formatting
 longest = results.collect { |r| (r['repo_name'] || r['repository_url'].split('/').last(2).join('/')).length rescue 0 }.max

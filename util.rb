@@ -1,6 +1,12 @@
-require 'ostruct'
-require 'time'
-require 'date'
+%w(ostruct optparse optparse/date optparse/time gcloud date time).each do |_req|
+  begin
+    require _req
+  rescue LoadError => e
+    puts "Yo - you need to install #{_req} 'gem install #{_req}'"
+    raise e
+  end
+end
+
 
 # Extend string so i dont have to retype this_method -> ThisMethod
 class String
@@ -26,7 +32,7 @@ class Query
     if job.failed?
       raise job.error['message']
     else
-      job.query_results
+      job
     end
   end
 end
