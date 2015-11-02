@@ -37,177 +37,110 @@ class Query
   end
 end
 
-
-# This class may seem dumb - and it would be but it allows me to visually compare two differing datasets that
-# need to be visualized as one.
-# For example, I'm able to look at both the older and newer data sets to see that they both have the same constraints
-# without having to flip back and forth through a class
-class Points
-  # Event types, really just used for visualization
-  def all_event_types
-    {"type": "MemberEvent"}
-    {"type": "WatchEvent"}
-    {"type": "ReleaseEvent"}
-    {"type": "PullRequestEvent"}
-    {"type": "IssuesEvent"}
-    {"type": "CreateEvent"}
-    {"type": "GistEvent"}
-    {"type": "PushEvent"}
-    {"type": "GollumEvent"}
-    {"type": "PullRequestReviewCommentEvent"}
-    {"type": "DeleteEvent"}
-    {"type": "CommitCommentEvent"}
-    {"type": "ForkEvent"}
-    {"type": "IssueCommentEvent"}
-    {"type": "PublicEvent"}
-  end
-
-  def query_types
-    (Points.new.public_methods - [:points, :types])- Object.methods
-  end
-
-  private :query_types, :all_event_types
-
-  def create_event
-    ::OpenStruct.new({points: 10,
-                      type: __method__.to_s.camelize,
-                      older: "payload_ref is null",
-                      newer: "JSON_EXTRACT(payload, '$.ref') = 'null'"
-                     })
-  end
-
-  def fork_event
-    ::OpenStruct.new({points: 5,
-                      type: __method__.to_s.camelize,
-                      older: "repository_fork = 'true'",
-                      newer: "JSON_EXTRACT(payload, '$.forkee.fork') = 'true'"
-                     })
-  end
-
-  def member_event
-    ::OpenStruct.new({points: 3,
-                      type: __method__.to_s.camelize,
-                      older: "payload_action = 'added'",
-                      newer: "JSON_EXTRACT(payload, '$.action') = 'added'"
-                     })
-  end
-
-  def pull_request_event
-    ::OpenStruct.new({points: 2,
-                      type: "PullRequestEvent",
-                      older: "payload_pull_request_merged = 'true' and payload_pull_request_state = 'closed'",
-                      newer: "JSON_EXTRACT(payload, '$.pull_request.merged') = 'true' and JSON_EXTRACT(payload, '$.action') = 'true'"
-                     })
-  end
-
-  def watch_event
-    ::OpenStruct.new({points: 1,
-                      type: __method__.to_s.camelize,
-                      older: "payload_action = 'started'",
-                      newer: "JSON_EXTRACT(payload, '$.action') = 'started'"
-                     })
-  end
-
-  def issues_event
-    ::OpenStruct.new({points: 1,
-                      type: __method__.to_s.camelize,
-                      older: "payload_action = 'opened'",
-                      newer: "JSON_EXTRACT(payload, '$.action') = 'opened'"
-                     })
-  end
-
-  def types
-    query_types.collect { |e| send(e).send(:type) }.uniq
-  end
-
-  # get some ratings
-  def points
-    query_types.collect { |e| {e => send(e).send(:points)} }.inject(:merge)
-  end
-end
-
 # Timeline records:
 # 2007-10-29 14:37:16	2015-01-01 18:05:48
 # Purpose is to assign points to projects
 class QueryBuilder
-  attr_accessor :pointer, :before, :after, :top
+  attr_accessor :before, :after, :top, :base_query
 
   def initialize(before, after, top = 20)
-    @pointer = Points.new
     @before = before
     @after = after
     @top = top
+    @base_query = if before.to_time.to_i > Time.parse("2015-01-01").to_time.to_i
+                    after_timeline_base_table
+                  else
+                    timeline_base_table
+                  end
   end
 
-  # used to query data after the timeline api expired
-  def after_timeline
-    @base_query = <<END
-SELECT
-  /* create event */
-  SUM(
-  case
-    when (type = '#{pointer.create_event.type}' and #{pointer.create_event.newer})
-    then #{pointer.create_event.points}
-    /* Forked */
-    when (type = '#{pointer.fork_event.type}' and #{pointer.fork_event.newer})
-      then #{pointer.fork_event.points}
-    /* Member added */
-    when (type = '#{pointer.member_event.type}' and #{pointer.member_event.newer})
-      then #{pointer.member_event.points}
-    when (type = '#{pointer.pull_request_event.type}' and #{pointer.pull_request_event.newer})
-      then #{pointer.pull_request_event.points}
-    WHEN (type = '#{pointer.watch_event.type}' and #{pointer.watch_event.newer})
-      THEN #{pointer.watch_event.points}
-    WHEN (type = '#{pointer.issues_event.type}' and #{pointer.issues_event.newer})
-      THEN #{pointer.issues_event.points}
-  end ) as points,
-  repo.name as repo_name
-  FROM ( TABLE_DATE_RANGE([githubarchive:day.events_],
-  TIMESTAMP('#{after.to_time.strftime('%Y-%m-%d')}'), TIMESTAMP('#{before.to_time.strftime('%Y-%m-%d')}') ))
-  WHERE
-  type in ('#{pointer.types.join("','")}')
-  and repo.name is not null
-  group by repo_name
-  order by points desc
-  limit #{top}
-
-
+  def wheres_and_whens
+    @wheres_and_whens ||= <<END
+    WHERE
+    type in ('CreateEvent',
+        'ForkEvent',
+        'MemberEvent',
+        'PullRequestEvent',
+        'WatchEvent',
+        'IssuesEvent')
+    and created_at >= '#{after.to_datetime.to_s}'
+    and created_at <= '#{before.to_datetime.to_s}'
 END
+  end
+
+  def after_timeline_base_table
+    @after_timeline_base_table ||= <<END
+SELECT
+  type,
+  REPLACE(repo.url, 'https://api.github.com/repos/', 'https://github.com/') as repository_url,
+  JSON_EXTRACT(payload, '$.action') as payload_action,
+  JSON_EXTRACT(payload, '$.pull_request.merged') as payload_pull_request_merged,
+  JSON_EXTRACT(payload, '$.pull_request.state') as payload_pull_request_state,
+  JSON_EXTRACT(payload, '$.ref') as payload_ref
+FROM ( TABLE_DATE_RANGE([githubarchive:day.events_],
+  TIMESTAMP('#{after.to_time.strftime('%Y-%m-%d')}'), TIMESTAMP('#{before.to_time.strftime('%Y-%m-%d')}')
+))
+#{wheres_and_whens} AND repo.url IS NOT NULL
+END
+  end
+
+  def timeline_base_table
+    tables = [after, before].collect { |d| "[githubarchive:year.#{d.strftime('%Y')}]" }.uniq.join(',')
+    @timeline_base_table ||= <<END
+  SELECT
+    type,
+    payload_ref,
+    payload_pull_request_merged,
+    payload_pull_request_state,
+    payload_action,
+    repository_url
+  FROM (#{tables})
+    #{wheres_and_whens}
+    AND repository_url IS NOT NULL
+END
+
   end
 
   # used when the before is < 2015-01-01
   # after = (Time.now - (2.419e+6*14))
   # before = Time.parse('2014-10-29 23:45:12 -0700')
   def timeline
-    @timeline_query = <<END
-    SELECT
-    SUM(
-    CASE
-    WHEN (type = '#{pointer.create_event.type}' and #{pointer.create_event.older})
-      THEN #{pointer.fork_event.points}
-    WHEN (type = '#{pointer.fork_event.type}' and #{pointer.fork_event.older})
-      THEN #{pointer.fork_event.points}
-    WHEN (type = '#{pointer.member_event.type}' and #{pointer.member_event.older})
-      THEN #{pointer.member_event.points}
-    WHEN (type = '#{pointer.pull_request_event.type}' and #{pointer.pull_request_event.older})
-      THEN #{pointer.pull_request_event.points}
-    WHEN (type = '#{pointer.watch_event.type}' and #{pointer.watch_event.older})
-      THEN #{pointer.watch_event.points}
-    WHEN (type = '#{pointer.issues_event.type}' and #{pointer.issues_event.older})
-      THEN #{pointer.issues_event.points}
-    END) as points,
-    repository_url
-      FROM ([githubarchive:github.timeline])
-       where created_at >= '#{after.to_time}'
-        and created_at <= '#{before.to_time}'
-        AND type in ('#{pointer.types.join("','")}')
-        AND repository_url is not null
-        /* Clear out some junk so its not counted on my bill */
-      GROUP BY repository_url
-    ORDER BY points desc
-    limit #{top}
-END
 
+    @timeline_query = <<END
+SELECT
+  SUM(
+    CASE
+    WHEN (type = 'CreateEvent' and payload_ref is null)
+      THEN 10
+    WHEN (type = 'ForkEvent')
+      THEN 5
+    WHEN (type = 'MemberEvent')
+      THEN 3
+    WHEN (type = 'PullRequestEvent'and payload_pull_request_merged = 'true' and payload_pull_request_state = 'closed')
+      THEN 2
+    WHEN (type = 'WatchEvent')
+      THEN 1
+    WHEN (type = 'IssuesEvent' and payload_action = 'opened')
+      THEN 1
+    ELSE
+      0
+    END
+  ) as points,
+REPLACE(repository_url, 'https://github.com/', '') repo_name
+FROM (
+  #{base_query}
+)
+GROUP BY
+  type,
+  payload_action,
+  payload_pull_request_merged,
+  payload_pull_request_state,
+  repository_url,
+  payload_ref,
+  repo_name
+ORDER BY points desc
+limit #{top}
+END
   end
 end
 
@@ -221,7 +154,7 @@ class GnuPlot
   def formatter
     @file ||= begin
       out = "'Repo Name', 'Score', 'Points'"
-      results.each_with_index { |r, i| out << "#{r['repo_name']||r['repository_url'].split('/').last(2).join('/')},#{r['points']},#{i}\n" }
+      results.each_with_index { |r, i| out << "#{r['repo_name']},#{r['points']},#{i}\n" }
       out
     end
   end

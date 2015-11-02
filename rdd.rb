@@ -60,11 +60,7 @@ if options.before < options.after
   raise "#{options.before.to_s} should be after #{options.after.to_s} -- Check --before/-b and --after/-a options"
 end
 
-sql = if options.before.to_time.to_i > Time.parse("2015-01-01").to_time.to_i # if its after 2015, then
-        QueryBuilder.new(options.before, options.after, options.top).after_timeline
-      else
-        QueryBuilder.new(options.before, options.after, options.top).timeline
-      end
+sql = QueryBuilder.new(options.before, options.after, options.top).timeline
 # puts sql
 puts "Getting Github statistics for #{options.after} - #{options.before}"
 start = Time.now
@@ -77,13 +73,13 @@ cached = done_job.cache_hit? ? '[cached]' : ''
 puts "Results (#{(finish - start).to_i} seconds, searching #{done_job.bytes_processed} bytes #{cached})"
 
 # Going old school here with some line formatting
-longest = results.collect { |r| (r['repo_name'] || r['repository_url'].split('/').last(2).join('/')).length rescue 0 }.max
+longest = results.collect { |r| (r['repo_name']).length rescue 0 }.max
 
 format = "%d.\t%#{longest}s -- %d points\n"
 
 begin
   results.each_with_index { |r, i|
-    printf(format, i + 1, (r['repo_name'] || r['repository_url'].split('/').last(2).join('/') rescue ''), r['points'])
+    printf(format, i + 1, (r['repo_name']), r['points'])
   }
 
   if options.gnuplot
