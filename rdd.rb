@@ -60,6 +60,11 @@ if options.before < options.after
   raise "#{options.before.to_s} should be after #{options.after.to_s} -- Check --before/-b and --after/-a options"
 end
 
+if options.before.year <= 2014 && options.after >= 2015
+  puts "Cannot span 2014 -> 2015 in request query"
+  exit 1
+end
+
 sql = QueryBuilder.new(options.before, options.after, options.top).timeline
 # puts sql
 puts "Getting Github statistics for #{options.after} - #{options.before}"
@@ -72,9 +77,7 @@ finish = Time.now
 cached = done_job.cache_hit? ? '[cached]' : ''
 puts "Results (#{(finish - start).to_i} seconds, searching #{done_job.bytes_processed} bytes #{cached})"
 
-# Going old school here with some line formatting
 longest = results.collect { |r| (r['repo_name']).length rescue 0 }.max
-
 format = "%d.\t%#{longest}s -- %d points\n"
 
 begin
