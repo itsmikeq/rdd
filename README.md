@@ -1,8 +1,17 @@
 ## RDD 
 
->hopefully stands for resume driven development and not really dumb design
+### Setup
 
-Requires you to have a [json formatted development key](https://console.developers.google.com/project) from google cloud in '.'
+Requires you to have a [json formatted development key](https://console.developers.google.com/project) from google cloud
+You can put this file anywhere and export its location, or place it in `.`
+
+Alternatively you can use the gcloud SDK and run `gcloud auth --account you@gmail.com --project your-project login`
+
+You'll also need to export your project with `export GCLOUD_PROJECT=my-project-name`
+
+### Usage
+
+> Example: `./rdd.rb --after 2015-08-05T20:10:02-00:00 --top 20`
 
 ```
 Usage: rrd.rb [options]
@@ -17,4 +26,3 @@ Usage: rrd.rb [options]
     -w, --answer                     Answers the questions
                                      Default: 20
 ```                                   
-                                     

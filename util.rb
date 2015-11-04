@@ -20,13 +20,21 @@ class Query
   attr_accessor :gcloud, :bigquery
 
   def initialize
-    @gcloud = Gcloud.new "github-memikequinn-parsing"
+    @gcloud = Gcloud.new
     @bigquery = @gcloud.bigquery
   end
 
   def execute(query)
     job = bigquery.query_job query, cache: true
-    job.wait_until_done!
+    begin
+      job.wait_until_done!
+    rescue => e
+      if e.message.match(/Access Denied: Job/)
+        puts "You need to log in first"
+        puts "Please run gcloud auth --account <your gmail account> --project #{ENV['GCLOUD_PROJECT']} and try again"
+        exit 1
+      end
+    end
 
 
     if job.failed?

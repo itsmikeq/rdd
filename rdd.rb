@@ -2,18 +2,19 @@
 # Load up my helper
 load File.join(File.dirname(__FILE__), 'util.rb')
 
-# Password is notasecret
-# Creds are needed for a successful connection, this is sloppy but functional
-creds_file = File.join(File.dirname(__FILE__), Dir.glob('*.json').first)
-raise "json encoded google apps file needed, put it in the current directory.
-It needs to be the json formatted one from https://console.developers.google.com/project" unless creds_file
-ENV['GOOGLE_APPLICATION_CREDENTIALS'] = creds_file
+ENV['GCLOUD_KEYFILE'] ||= File.join(File.dirname(__FILE__), Dir.glob('*@*.json').first) rescue nil
+
+if !ENV['GCLOUD_PROJECT'] || ENV['GCLOUD_PROJECT'].empty?
+  puts "Please set your google cloud project name with 'export GCLOUD_PROJECT=my-project-name'"
+  exit 1
+end
 
 class ElParso
   def self.parse(args)
     options = ::OpenStruct.new
-    options.after = (Time.now - (60*60*24*20)).to_datetime
-    options.before = DateTime.now
+    # use a rounded time, so we can cache the result
+    options.after = DateTime.parse((Time.now - (60*60*24*20)).to_datetime.strftime('%Y-%m-%d'))
+    options.before = DateTime.parse(DateTime.now.strftime('%Y-%m-%d'))
     options.top = 20
 
     opt_parser = OptionParser.new do |opts|
