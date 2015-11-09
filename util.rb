@@ -48,20 +48,61 @@ end
 
 # Timeline records:
 # 2007-10-29 14:37:16	2015-01-01 18:05:48
-# Builds queries used by the commandline rdd.rb.  
-class QueryBuilder
+# Builds queries used by the commandline rdd.rb.
+# .execute runs the sql
+class Querier
   attr_accessor :before, :after, :top, :base_query
-  
+
   def initialize(before, after, top = 20)
     @before = before
     @after = after
     @top = top
-    @base_query = if before.to_time.to_i > Time.parse("2015-01-01").to_time.to_i
+    @base_query = if before.strftime('%Y').to_i >= 2015 && after.strftime('%Y').to_i >= 2015
                     after_timeline_base_table
-                  else
+                  elsif before.strftime('%Y').to_i < 2015 && after.strftime('%Y').to_i < 2015
                     timeline_base_table
                   end
   end
+
+  def execute
+    if base_query
+      done_job = Query.new.execute(timeline)
+      # Note if the query was cached because these are free queries
+      {results: done_job.query_results, cached: done_job.cache_hit?, bytes: done_job.bytes_processed}
+    else
+      puts "No base table"
+      a = begin
+        @base_query = after_timeline_base_table
+        Query.new.execute(timeline)
+      end
+      b = begin
+        @base_query = timeline_base_table
+        Query.new.execute(timeline)
+      end
+      results = a.query_results
+      results += b.query_results
+      results.flatten!
+      cached = !!(a.cache_hit? && b.cache_hit?)
+      h = {}
+      # deduplicate array of hashes keys
+      results.each do |e|
+        if h.has_key?(e['repo_name'])
+          h.merge!(e['repo_name'] => (e['points'] + h[e['repo_name']]))
+        else
+          h.merge!(e['repo_name'] => e['points'])
+        end
+      end
+      # Back into an array of hashes
+      results = h.collect do |k, v|
+        {'repo_name' => k, 'points' => v}
+      end
+      # Sort by points, ascending
+      results.sort_by! { |e| e['points'] }.reverse!
+      {results: results.first(top), cached: cached, bytes: (a.bytes_processed.to_i + b.bytes_processed.to_i)}
+    end
+
+  end
+
   # Set shared where/when clauses
   def wheres_and_whens
     @wheres_and_whens ||= <<END
@@ -76,6 +117,7 @@ class QueryBuilder
     and created_at <= '#{before.to_datetime.to_s}'
 END
   end
+
   # for queries > Dec 31, 2014
   # Base table is set so that we can use the same detail queries later
   def after_timeline_base_table
@@ -93,10 +135,11 @@ FROM ( TABLE_DATE_RANGE([githubarchive:day.events_],
 #{wheres_and_whens} AND repo.url IS NOT NULL
 END
   end
+
   # for queries < Jan 1, 2015
   # Base table is set so that we can use the same detail queries later
   def timeline_base_table
-    tables = [after, before].collect { |d| "[githubarchive:year.#{d.strftime('%Y')}]" }.uniq.join(',')
+    tables = [after, before].collect { |d| next unless d.strftime('%Y').to_i < 2015; "[githubarchive:year.#{d.strftime('%Y')}]" }.compact.uniq.join(',')
     @timeline_base_table ||= <<END
   SELECT
     type,
@@ -111,7 +154,7 @@ END
 END
   end
 
-  
+
   # Since all queries look the same as the < 2015 table (timeline)
   # We can use the same master query to resolve data
   def timeline

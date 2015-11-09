@@ -67,28 +67,20 @@ options = ElParso.parse(ARGV)
 if options.before < options.after
   raise "#{options.before.to_s} should be after #{options.after.to_s} -- Check --before/-b and --after/-a options"
 end
-# Since the API changed between 2014 and 2015, only allow before/after both before or both after 2014
-if options.before.year <= 2014 && options.after >= 2015
-  puts "Cannot span 2014 -> 2015 in request query"
-  exit 1
-end
 
-sql = QueryBuilder.new(options.before, options.after, options.top).timeline
 puts "Getting Github statistics for #{options.after} - #{options.before}"
 start = Time.now
-done_job = Query.new.execute sql
-results = done_job.query_results
+results = Querier.new(options.before, options.after, options.top).execute
 finish = Time.now
-# Note if the query was cached because these are free queries
-cached = done_job.cache_hit? ? '[cached]' : ''
-puts "Results (#{(finish - start).to_i} seconds, searching #{done_job.bytes_processed} bytes #{cached})"
+cached = results[:cached] ? '[cached]' : ''
+puts "Results (#{(finish - start).to_i} seconds, searching #{results[:bytes]} bytes #{cached})"
 # Used by the formatter.  We need to have the longest line so that subsequent items line up correctly
-longest = results.collect { |r| (r['repo_name']).length rescue 0 }.max
+longest = results[:results].collect { |r| (r['repo_name']).length rescue 0 }.max
 format = "%d.\t%#{longest}s -- %d points\n"
 
 begin
   # Print results
-  results.each_with_index { |r, i|
+  results[:results].each_with_index { |r, i|
     printf(format, i + 1, (r['repo_name']), r['points'])
   }
 

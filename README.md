@@ -11,10 +11,10 @@ You'll also need to export your project with `export GCLOUD_PROJECT=my-project-n
 
 ### Usage
 
-> Example: `./rdd.rb --after 2015-08-05T20:10:02-00:00 --top 20`
+> Example: `./rdd --after 2015-08-05T20:10:02-00:00 --top 20`
 
 ```
-Usage: rrd.rb [options]
+Usage: rrd [options]
     -a, --after [Date]               Date to start search at, ISO8601 or YYYY-MM-DD format.
                                      Default: 28 days ago
     -b, --before [Date]              ISO8601 Date to end search at, ISO8601 or YYYY-MM-DD format.
