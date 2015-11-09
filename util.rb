@@ -1,3 +1,4 @@
+# Go through and require each of the require gems/libraries
 %w(ostruct optparse optparse/date optparse/time gcloud date time).each do |_req|
   begin
     require _req
@@ -47,10 +48,10 @@ end
 
 # Timeline records:
 # 2007-10-29 14:37:16	2015-01-01 18:05:48
-# Purpose is to assign points to projects
+# Builds queries used by the commandline rdd.rb.  
 class QueryBuilder
   attr_accessor :before, :after, :top, :base_query
-
+  
   def initialize(before, after, top = 20)
     @before = before
     @after = after
@@ -61,7 +62,7 @@ class QueryBuilder
                     timeline_base_table
                   end
   end
-
+  # Set shared where/when clauses
   def wheres_and_whens
     @wheres_and_whens ||= <<END
     WHERE
@@ -75,7 +76,8 @@ class QueryBuilder
     and created_at <= '#{before.to_datetime.to_s}'
 END
   end
-
+  # for queries > Dec 31, 2014
+  # Base table is set so that we can use the same detail queries later
   def after_timeline_base_table
     @after_timeline_base_table ||= <<END
 SELECT
@@ -91,7 +93,8 @@ FROM ( TABLE_DATE_RANGE([githubarchive:day.events_],
 #{wheres_and_whens} AND repo.url IS NOT NULL
 END
   end
-
+  # for queries < Jan 1, 2015
+  # Base table is set so that we can use the same detail queries later
   def timeline_base_table
     tables = [after, before].collect { |d| "[githubarchive:year.#{d.strftime('%Y')}]" }.uniq.join(',')
     @timeline_base_table ||= <<END
@@ -106,14 +109,12 @@ END
     #{wheres_and_whens}
     AND repository_url IS NOT NULL
 END
-
   end
 
-  # used when the before is < 2015-01-01
-  # after = (Time.now - (2.419e+6*14))
-  # before = Time.parse('2014-10-29 23:45:12 -0700')
+  
+  # Since all queries look the same as the < 2015 table (timeline)
+  # We can use the same master query to resolve data
   def timeline
-
     @timeline_query = <<END
 SELECT
   SUM(
@@ -152,6 +153,7 @@ END
   end
 end
 
+# Creates a gnuplot output of requested data
 class GnuPlot
   attr_accessor :results
 
